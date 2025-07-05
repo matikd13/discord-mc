@@ -11,20 +11,34 @@ import {
 } from "discord.js";
 import "dotenv/config";
 
+import { RCONClient } from "@minecraft-js/rcon"; // ES6
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create a new client instance
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const rconClient = new RCONClient("127.0.0.1", process.env.RCON_PAASSWORD);
 
-// When the client is ready, run this code (only once).
-// The distinction between `client: Client<boolean>` and `readyClient: Client<true>` is important for TypeScript developers.
-// It makes some properties non-nullable.
-client.once(Events.ClientReady, (readyClient) => {
+rconClient.on("authenticated", () => {
+  console.log("RCON OK");
+});
+
+rconClient.on("error", () => {
+  console.log("RCON ERROR");
+});
+
+rconClient.on("response", (requestId, packet) => {
+  console.log(requestId);
+  console.log(packet);
+  console.log(packet.payload);
+  // Access the command response by `packet.payload`
+});
+
+const discordClient = new Client({ intents: [GatewayIntentBits.Guilds] });
+discordClient.once(Events.ClientReady, (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 });
 
-client.commands = new Collection();
+discordClient.commands = new Collection();
 const foldersPath = path.join(__dirname, "commands");
 
 const commandFiles = fs
@@ -35,7 +49,7 @@ for (const file of commandFiles) {
   const command = await import(filePath);
   // Set a new item in the Collection with the key as the command name and the value as the exported module
   if ("data" in command && "execute" in command) {
-    client.commands.set(command.data.name, command);
+    discordClient.commands.set(command.data.name, command);
   } else {
     console.log(
       `[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`
@@ -43,7 +57,7 @@ for (const file of commandFiles) {
   }
 }
 
-client.on(Events.InteractionCreate, async (interaction) => {
+discordClient.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = interaction.client.commands.get(interaction.commandName);
@@ -71,4 +85,5 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-client.login(process.env.BOT_TOKEN);
+discordClient.login(process.env.BOT_TOKEN);
+rconClient.connect();

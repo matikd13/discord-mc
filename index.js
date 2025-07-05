@@ -8,6 +8,7 @@ import {
   Events,
   GatewayIntentBits,
   MessageFlags,
+  EmbedBuilder,
 } from "discord.js";
 import "dotenv/config";
 
@@ -16,26 +17,25 @@ import { RCONClient } from "@minecraft-js/rcon"; // ES6
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const rconClient = new RCONClient("127.0.0.1", process.env.RCON_PAASSWORD);
+const rconClient = new RCONClient("127.0.0.1", process.env.RCON_PASSWORD);
 
-rconClient.on("authenticated", () => {
+var serverOnline = false;
+var onlineUsers = [];
+var admins = 0;
+
+rconClient.on("authenticated", async () => {
   console.log("RCON OK");
+  updateServerStatus();
 });
 
 rconClient.on("error", () => {
   console.log("RCON ERROR");
 });
 
-rconClient.on("response", (requestId, packet) => {
-  console.log(requestId);
-  console.log(packet);
-  console.log(packet.payload);
-  // Access the command response by `packet.payload`
-});
-
 const discordClient = new Client({ intents: [GatewayIntentBits.Guilds] });
 discordClient.once(Events.ClientReady, (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
+  printServerStatus();
 });
 
 discordClient.commands = new Collection();
@@ -87,3 +87,58 @@ discordClient.on(Events.InteractionCreate, async (interaction) => {
 
 discordClient.login(process.env.BOT_TOKEN);
 rconClient.connect();
+
+async function updateServerStatus() {
+  if (!rconClient.authenticated || !rconClient.connected) {
+    serverOnline = false;
+    setTimeout(() => {
+      rconClient.connect();
+    }, 1000);
+    return;
+  }
+
+  serverOnline = true;
+
+  let listOutput = await rconClient.executeCommandAsync("list");
+  listOutput = listOutput.replace(/Â§./g, "");
+
+  const adminsCount = listOutput.match(/\[root\]|\[Admin\]/g);
+  admins = adminsCount ? adminsCount.length : 0;
+
+  const lines = listOutput.trim().split("\n");
+  const firstLine = lines[0];
+  onlineUsers = firstLine.match(/\d+/g);
+}
+
+async function printServerStatus() {
+  const channel = await discordClient.channels.fetch(
+    process.env.STATUS_CHANNEL_ID
+  );
+
+  const exampleEmbed = new EmbedBuilder()
+    .setColor(serverOnline ? 0x00ff00 : 0xff0000)
+    .setTitle("Status Serwera Minecraft")
+    .setDescription(`Serwer ${!serverOnline ? "nie " : ""}żyje`)
+    .addFields(
+      { name: "Ilość graczy:", value: `${onlineUsers[0]}/${onlineUsers[1]}` },
+      { name: "Ilość adminów:", value: admins.toString() }
+    )
+    .setTimestamp();
+
+  const messages = await channel.messages.fetch({ limit: 100 });
+
+  let targetMessage = messages.find(
+    (m) => m.author.id == discordClient.user.id
+  );
+
+  if (targetMessage) {
+    targetMessage.edit({ embeds: [exampleEmbed] });
+  } else {
+    channel.send({ embeds: [exampleEmbed] });
+  }
+}
+
+setInterval(async () => {
+  await updateServerStatus();
+  await printServerStatus();
+}, 10000);

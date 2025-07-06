@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 const rconClient = new RCONClient("127.0.0.1", process.env.RCON_PASSWORD);
 
 var serverOnline = false;
-var onlineUsers = [];
+var onlineUsers = [0, 0];
 var admins = 0;
 
 rconClient.on("authenticated", async () => {
@@ -120,6 +120,7 @@ async function printServerStatus() {
     .setTitle("Status Serwera Minecraft")
     .setDescription(`Serwer ${!serverOnline ? "nie " : ""}żyje`)
     .addFields(
+      { name: "Adres IP:", value: `${process.env.SERVER_IP}` },
       { name: "Ilość graczy:", value: `${onlineUsers[0]}/${onlineUsers[1]}` },
       { name: "Ilość adminów:", value: admins.toString() }
     )
